@@ -40,7 +40,6 @@ from ui import (CARD, CSF_BLUE, CSF_YELLOW, GRID, INK, INK2, MONO, MUTED,
 ROOT = Path(__file__).parent
 WB = ROOT / "PAB_UDISE_ICT_master.xlsx"
 LINKS = ROOT / "PAB_document_links.xlsx"
-UDISE = ROOT / "udise_ict.csv"
 
 # Years whose extraction is closed: every state read, every block
 # reconciled against its own printed total. Only these are allowed to
@@ -149,9 +148,19 @@ def load_links(mtime=None):
 
 @st.cache_data
 def load_udise(mtime=None):
-    if not UDISE.exists():
+    """The school census, from the workbook's own Data_UDISE sheet.
+
+    Read from the workbook rather than from udise_ict.csv on purpose:
+    shipping both would put two copies of the same figures in the repo,
+    and they would drift the first time one was refreshed alone. The
+    workbook is the deliverable, so it is the single source here too.
+    Returns None when the sheet is absent, and the tab says so rather
+    than showing an estimate.
+    """
+    try:
+        return pd.read_excel(WB, sheet_name="Data_UDISE")
+    except ValueError:
         return None
-    return pd.read_csv(UDISE)
 
 
 def _mt(p):
@@ -165,7 +174,7 @@ if not WB.exists():
 
 COST, EXEC = load(_mt(WB))
 DOCLINKS = load_links(_mt(LINKS))
-UD = load_udise(_mt(UDISE))
+UD = load_udise(_mt(WB))
 
 YEARS_IN_WB = sorted(COST["year"].dropna().unique())
 YEARS_PARTIAL = [y for y in YEARS_IN_WB if y not in YEARS_COMPLETE]
@@ -736,10 +745,10 @@ with tab_ground:
     if UD is None or UD.empty:
         with section("Not published yet", "plain"):
             st.info(
-                "The UDISE Plus infrastructure tables have not been "
-                "extracted into udise_ict.csv yet. This tab fills itself "
-                "in as soon as that file lands beside the app, and shows "
-                "nothing rather than an estimate in the meantime.")
+                "The workbook carries no Data_UDISE sheet yet. This tab "
+                "fills itself in as soon as build_ict_workbook.py is run "
+                "with udise_ict.csv present, and shows nothing rather "
+                "than an estimate in the meantime.")
     else:
         with section("Choose a measure", "plain"):
             c = st.columns([3, 2, 2])
