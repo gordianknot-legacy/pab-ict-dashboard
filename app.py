@@ -99,6 +99,19 @@ NO_ASK = {
         "on any of its 25 Budget Demand pages. Its p84 ICT is labs at the "
         "SCERT and 9 DIETs, and the full ICT table at p18-20 is a "
         "prior-year spillover annexure, not a costing sheet",
+    ("2023-24", "Karnataka"):
+        "All 93 Total of lines across its costing sheet were enumerated "
+        "and none is ICT. Its only ICT is a BRC facility and DIET/SCERT "
+        "technology support; the Total for ICT on p21 belongs to the "
+        "prior-year Spill Over report, not a costing sheet",
+    ("2023-24", "Delhi"):
+        "All 30 Total of lines across its costing sheet were enumerated "
+        "and none is ICT. Smart Classroom and Digital Hardware appear "
+        "only on p17, in the March 2022-23 Spill Over table",
+    ("2023-24", "Lakshadweep"):
+        "Digital Hardware appears only in its p28-29 Spill Over report. "
+        "Indicative rather than proven, because its costing sheet OCR is "
+        "too damaged to enumerate the boundary lines",
 }
 
 COMPONENTS = ["ICT Lab", "Smart Classroom", "Digital Library",
