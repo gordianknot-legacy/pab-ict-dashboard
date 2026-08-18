@@ -84,6 +84,33 @@ COMP_COLOR = {
 LEVELS = ["Elementary", "Secondary"]
 NATURES = {"NR": "Non recurring", "R": "Recurring"}
 
+# UDISE Plus measures, in the order a reader wants them rather than
+# alphabetically. The slugs are udise_extract.py's; the labels are what
+# goes on the page, and the raw printed header stays in each table's
+# "As printed" column so the mapping can always be checked.
+UD_LABEL = {
+    "schools_with_computer": "Schools with a computer",
+    "schools_with_functional_computer":
+        "Schools with a working computer for teaching",
+    "schools_with_internet": "Schools with internet",
+    "schools_with_smart_classroom": "Schools with a smart classroom",
+    "schools_with_digital_library": "Schools with a digital library",
+    "govt_schools_with_ict_lab": "Government schools with an ICT lab",
+    "govt_schools_with_functional_ict_lab":
+        "Government schools with a working ICT lab",
+    "govt_aided_schools_with_ict_lab":
+        "Government aided schools with an ICT lab",
+    "govt_aided_schools_with_functional_ict_lab":
+        "Government aided schools with a working ICT lab",
+    "schools_with_electricity": "Schools with electricity",
+    "schools_with_functional_electricity":
+        "Schools with working electricity",
+    "schools_total": "Schools in total",
+    "govt_schools_total": "Government schools in total",
+    "govt_aided_schools_total": "Government aided schools in total",
+}
+UD_METRICS = list(UD_LABEL)
+
 st.set_page_config(page_title="School ICT in PAB minutes",
                    layout="wide", page_icon="🖥️")
 inject_css()
@@ -143,6 +170,7 @@ UD = load_udise(_mt(UDISE))
 YEARS_IN_WB = sorted(COST["year"].dropna().unique())
 YEARS_PARTIAL = [y for y in YEARS_IN_WB if y not in YEARS_COMPLETE]
 ALL_STATES = sorted(set(COST["state"]) | set(EXEC["state"]))
+UD_HAVE = set() if UD is None else set(UD["metric"])
 
 
 def source_url(local_file):
@@ -697,60 +725,185 @@ with tab_run:
 with tab_ground:
     st.markdown(
         "Money approved is one measure. Whether a school actually has a "
-        "working computer is another, and it is counted independently by "
-        "**UDISE Plus**, the ministry's annual school census. This tab "
-        "sets the two beside each other without merging them, because "
-        "they count different things in different years and a ratio "
-        "across them would be an invented number.")
+        "working computer is another, and **UDISE Plus**, the ministry's "
+        "annual school census, counts it independently of any budget "
+        "document. This tab sets the two beside each other and "
+        "deliberately stops there. It never divides one by the other, "
+        "because the census counts schools in a reference year while the "
+        "board approves rupees in a financial year, and a rate built "
+        "across them would be an invented number wearing a decimal "
+        "point.")
     if UD is None or UD.empty:
         with section("Not published yet", "plain"):
             st.info(
                 "The UDISE Plus infrastructure tables have not been "
-                "extracted into udise_ict.csv yet. The five report PDFs "
-                "are downloaded and the extraction is in progress. This "
-                "tab will fill itself in as soon as that file lands "
-                "beside the app, and it deliberately shows nothing "
-                "rather than an estimate in the meantime.")
+                "extracted into udise_ict.csv yet. This tab fills itself "
+                "in as soon as that file lands beside the app, and shows "
+                "nothing rather than an estimate in the meantime.")
     else:
-        with section("Choose what to look at", "plain"):
-            c = st.columns(3)
-            u_year = c[0].selectbox("Census year",
-                                    sorted(UD["year"].unique()),
-                                    index=len(UD["year"].unique()) - 1)
-            u_metric = c[1].selectbox("Measure",
-                                      sorted(UD["metric"].unique()))
-            u_level = c[2].selectbox("School level",
-                                     sorted(UD["level"].unique()))
-        u = UD[(UD["year"] == u_year) & (UD["metric"] == u_metric)
-               & (UD["level"] == u_level)]
-        with section("As counted by the census", "emerald"):
-            if u.empty:
+        with section("Choose a measure", "plain"):
+            c = st.columns([3, 2, 2])
+            u_metric = c[0].selectbox(
+                "Measure", [m for m in UD_METRICS if m in UD_HAVE],
+                format_func=lambda m: UD_LABEL.get(m, m),
+                help="Counted by the school census, independently of any "
+                     "budget document.")
+            avail_u = sorted(UD[UD["metric"] == u_metric]["unit"].unique())
+            # share first, because a count chart just ranks states by how
+            # many schools they have and says almost nothing about ICT
+            u_unit = c[1].radio(
+                "Shown as", avail_u, horizontal=True,
+                index=avail_u.index("percent") if "percent" in avail_u else 0,
+                format_func=lambda u: ("share of schools"
+                                       if u == "percent" else "school count"),
+                help="Percentages are printed by the census itself and are "
+                     "never computed here.")
+            u_years = sorted(UD[UD["metric"] == u_metric]["year"].unique())
+            u_year = c[2].selectbox("Census year", u_years,
+                                    index=len(u_years) - 1)
+
+        unit_t = "% of schools" if u_unit == "percent" else "schools"
+        u = UD[(UD["metric"] == u_metric) & (UD["unit"] == u_unit)
+               & (UD["year"] == u_year)]
+        scope = "; ".join(sorted(u["level"].unique()))
+        india = u[u["state"] == "India"]
+        g = u[u["state"] != "India"].sort_values("value", ascending=False)
+
+        with section("Every state, as the census counts it", "emerald"):
+            if g.empty:
                 st.info("No rows for that combination.")
             else:
-                g = u.sort_values("value", ascending=False)
-                unit = g["unit"].iloc[0]
                 st.altair_chart(
                     bar(g, alt.X("state:N", sort=g["state"].tolist()),
                         "value:Q", color=alt.value(CSF_BLUE),
                         tooltip=[alt.Tooltip("state:N", title="State"),
-                                 alt.Tooltip("value:Q", title=unit,
+                                 alt.Tooltip("value:Q", title=unit_t,
                                              format=",.1f")],
-                        height=340, ytitle=f"{u_metric} ({unit})"),
+                        height=340,
+                        ytitle=f"{UD_LABEL.get(u_metric, u_metric)}, "
+                               f"{unit_t}"),
                     use_container_width=True)
-                st.dataframe(g[["state", "value", "unit", "printed_label",
-                                "pdf_file", "pdf_page"]]
-                             .rename(columns={
-                                 "state": "State / UT", "value": "Value",
-                                 "unit": "Unit",
-                                 "printed_label": "As printed",
-                                 "pdf_file": "Source", "pdf_page": "Page"}),
-                             use_container_width=True, hide_index=True)
+                note = (f"India prints {india['value'].iloc[0]:,.1f} on "
+                        "the same page, and the 36 state and union "
+                        "territory values sum to that row exactly, which "
+                        "is how this extraction is checked. "
+                        if not india.empty else "")
+                st.caption(note + f"Scope as printed, {scope}.")
+                tb = (g[["state", "value", "printed_label", "pdf_file",
+                         "pdf_page"]]
+                      .rename(columns={"state": "State / UT",
+                                       "value": "Value",
+                                       "printed_label": "As printed",
+                                       "pdf_file": "Source",
+                                       "pdf_page": "Page"}))
+                st.dataframe(
+                    right_align(as_text(tb, ["Value"], ",.1f").style,
+                                ["Value"]),
+                    use_container_width=True, hide_index=True, height=330)
                 table_csv(u, f"udise_{u_metric}_{u_year}")
+
+        with section("The same measure across the census years", "blue"):
+            tr = UD[(UD["metric"] == u_metric) & (UD["unit"] == u_unit)]
+            pick = st.multiselect(
+                "States to trace", sorted(set(tr["state"]) - {"India"}),
+                default=list(g["state"].head(5)), key="ud_trace")
+            t = tr[tr["state"].isin(pick + ["India"])]
+            if not t.empty:
+                st.altair_chart(
+                    alt.Chart(t).mark_line(point=True, strokeWidth=2)
+                    .encode(
+                        x=alt.X("year:N", title="", axis=X_AXIS),
+                        y=alt.Y("value:Q", title=unit_t, axis=Y_AXIS),
+                        color=alt.Color("state:N", title="State",
+                                        scale=alt.Scale(range=SERIES)),
+                        tooltip=[alt.Tooltip("state:N", title="State"),
+                                 alt.Tooltip("year:N", title="Year"),
+                                 alt.Tooltip("value:Q", title=unit_t,
+                                             format=",.1f")])
+                    .properties(height=300)
+                    .configure_view(strokeWidth=0)
+                    .configure_legend(labelFont=SANS, labelColor=INK2,
+                                      titleFont=SANS, titleColor=QUIET,
+                                      labelFontSize=11, titleFontSize=10,
+                                      symbolType="stroke"),
+                    use_container_width=True)
+            if u_metric.startswith("govt"):
+                st.warning(
+                    "The ICT lab table changes what it covers between "
+                    "volumes. It reads Upper Primary, Secondary and "
+                    "Higher Secondary sections in 2021-22 and again in "
+                    "2025-26, but Middle and Secondary sections in "
+                    "between, which moves the denominator underneath the "
+                    "figure. Read this as three separate stretches, not "
+                    "one trend.")
+
+        with section("The money and the count, side by side", "gold"):
+            st.markdown(
+                "Two measurements of the same states, drawn from two "
+                "unrelated documents. A state high on one axis and low "
+                "on the other is worth a question rather than a "
+                "conclusion, because one year of approvals is small "
+                "against a stock of schools built up over many.")
+            c = st.columns(2)
+            b_year = c[0].selectbox("Budget year", YEARS_IN_WB,
+                                    index=len(YEARS_IN_WB) - 1,
+                                    key="ud_budget_year")
+            m_year = c[1].selectbox("Census year", u_years,
+                                    index=len(u_years) - 1,
+                                    key="ud_census_year")
+            money = (state_totals([b_year]).groupby("state", as_index=False)
+                     ["approved_cr"].sum())
+            cen = (UD[(UD["metric"] == u_metric) & (UD["unit"] == u_unit)
+                      & (UD["year"] == m_year) & (UD["state"] != "India")]
+                   [["state", "value"]])
+            both = money.merge(cen, on="state", how="inner")
+            if both.empty:
+                st.info("No states appear in both of those selections.")
+            else:
+                st.altair_chart(
+                    alt.Chart(both).mark_circle(size=120, opacity=0.75)
+                    .encode(
+                        x=alt.X("value:Q", axis=Y_AXIS,
+                                title=f"{UD_LABEL.get(u_metric, u_metric)}"
+                                      f", census {m_year} ({unit_t})"),
+                        y=alt.Y("approved_cr:Q", axis=Y_AXIS,
+                                title=f"ICT approved Rs Cr, {b_year}"),
+                        color=alt.value(CSF_BLUE),
+                        tooltip=[alt.Tooltip("state:N", title="State"),
+                                 alt.Tooltip("value:Q", title="Census",
+                                             format=",.1f"),
+                                 alt.Tooltip("approved_cr:Q",
+                                             title="Approved Cr",
+                                             format=",.2f")])
+                    .properties(height=340).configure_view(strokeWidth=0),
+                    use_container_width=True)
                 st.caption(
-                    "Counts and percentages exactly as the census report "
-                    "prints them. A percentage is never converted into a "
-                    "count, because the denominator the report used is "
-                    "not always the one on the same page.")
+                    f"{len(both)} states appear in both. Horizontal is "
+                    "the census, vertical is the board. No line is fitted "
+                    "through these points and no ratio is taken across "
+                    "the two axes.")
+
+        with section("What the census prints, and what it does not",
+                     "amber"):
+            st.markdown(
+                "- Counts and percentages are reproduced exactly as the "
+                "report prints them. A percentage is never turned into a "
+                "count, because the denominator the report used is not "
+                "always the one on the same page.\n"
+                "- Every figure was checked twice over. The 36 state "
+                "values sum to the printed India row for every count "
+                "measure in every year, and every printed percentage "
+                "agrees with its own printed count and denominator.\n"
+                "- Table numbering moves between volumes. The computers "
+                "and digital section is Section 10 in the 2021-22 report "
+                "and Section 9 from 2022-23 onward, so the As printed "
+                "column names the table each figure actually came from "
+                "rather than assuming a fixed number.\n"
+                "- One source defect is carried rather than hidden. The "
+                "2025-26 smart classroom table prints a damaged "
+                "column-number band on the page itself, so those rows "
+                "were read by column position and reconciled, and their "
+                "note says so.")
 
 
 # ============================================== 6. DATA QUALITY ====
