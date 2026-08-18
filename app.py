@@ -45,7 +45,22 @@ LINKS = ROOT / "PAB_document_links.xlsx"
 # reconciled against its own printed total. Only these are allowed to
 # carry a national headline. Anything else in the workbook is shown,
 # but always labelled with how many states it covers.
-YEARS_COMPLETE = ["2025-26", "2026-27"]
+YEARS_COMPLETE = ["2024-25", "2025-26", "2026-27"]
+
+# Blocks that are neither read nor confirmed absent, because the source
+# we hold cannot answer. A third category, and it earns its own
+# constant: rolling it into NO_ASK would claim a state asked for
+# nothing when the truth is that we cannot see the page.
+KNOWN_GAPS = {
+    ("2024-25", "Mizoram", "Secondary"):
+        "The minutes PDF contains only the ODD printed pages of its "
+        "Budget Demand (PDF p25 is printed page 1, p26 is page 3, and "
+        "so on). Printed page 38, the only place a Secondary ICT block "
+        "could sit, was never scanned. No render resolution recovers "
+        "it; it needs a re-fetch of the document. Mizoram's Elementary "
+        "figure is complete, because that block happens to print "
+        "entirely on one odd page.",
+}
 
 # States that appear in no costing row for a year because their minutes
 # print no school-ICT ask at all, with what settles it. Distinguishing
@@ -71,6 +86,19 @@ NO_ASK = {
     ("2025-26", "Lakshadweep"):
         "Budget Demand is fully digital and prints no school ICT block; its "
         "ICT appears only in the spillover tables",
+    ("2024-25", "Goa"):
+        "No Total of ICT and Digital Initiatives among the boundary lines "
+        "on any of its 20 Budget Demand pages; its only ICT is Technology "
+        "Support to TEIs at p32, which is teacher education",
+    ("2024-25", "Lakshadweep"):
+        "No Total of ICT and Digital Initiatives among the boundary lines "
+        "on any of its 15 Budget Demand pages; its only ICT is Technology "
+        "Support to TEIs at p33, which is teacher education",
+    ("2024-25", "Delhi"):
+        "No Total of ICT and Digital Initiatives among the boundary lines "
+        "on any of its 25 Budget Demand pages. Its p84 ICT is labs at the "
+        "SCERT and 9 DIETs, and the full ICT table at p18-20 is a "
+        "prior-year spillover annexure, not a costing sheet",
 }
 
 COMPONENTS = ["ICT Lab", "Smart Classroom", "Digital Library",
@@ -959,6 +987,21 @@ with tab_qual:
             [{"Year": y, "State / UT": s, "What settles it": why}
              for (y, s), why in sorted(NO_ASK.items())])
         st.dataframe(na, use_container_width=True, hide_index=True)
+
+    with section("The one thing the sources cannot answer", "pink"):
+        st.markdown(
+            "A year marked complete still has to admit what it could "
+            "not see. This is not a state that asked for nothing and "
+            "not a block still to be read. It is a page that was never "
+            "scanned into the document the ministry published.")
+        kg = pd.DataFrame(
+            [{"Year": y, "State / UT": s, "Level": lv, "Why": why}
+             for (y, s, lv), why in sorted(KNOWN_GAPS.items())])
+        st.dataframe(kg, use_container_width=True, hide_index=True)
+        st.caption(
+            "The affected state's other level is unaffected and is "
+            "published normally. No figure has been estimated to fill "
+            "the gap.")
 
     with section("Where each figure came from", "blue"):
         src = (COST.groupby(["year", "source_file"], as_index=False)
