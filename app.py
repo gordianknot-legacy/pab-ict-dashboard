@@ -892,9 +892,10 @@ with tab_run:
     st.markdown(
         "Approval is a decision. Execution is what happened next. The "
         "ministry prints each year's execution in the **following** "
-        "year's minutes, as a Non Recurring Activities Report, so this "
-        "tab lags the budget tabs by one year and its figures come from "
-        "a different table entirely.\n\n"
+        "year's minutes, so this tab lags the budget tabs by one year "
+        "and its figures come from a different table entirely. It "
+        "covers fewer years than the budget tabs, for the reason set "
+        "out below.\n\n"
         "One thing to hold on to before reading any figure here. The "
         "report's approval column is **cumulative**. It carries "
         "everything still open from earlier years alongside the current "
@@ -906,6 +907,33 @@ with tab_run:
         "approved has been turned into working equipment, how much was "
         "given back, and how much is still waiting.")
     ex_years = sorted(EXEC["year_filled"].dropna().unique())
+    missing = [y for y in YEARS_IN_WB if y not in ex_years]
+    if missing:
+        with section("Why this tab covers fewer years than the others",
+                     "amber"):
+            st.markdown(
+                f"Execution is published for **{', '.join(ex_years)}** "
+                f"and not yet for **{', '.join(missing)}**, and the "
+                "reason is a change in what the ministry prints rather "
+                "than a gap in reading.\n\n"
+                "The **Non Recurring Activities Report** this tab reads "
+                "is a PRABANDH-era table. It appears in the 2026-27 "
+                "minutes and in no document before them, so it can only "
+                "ever fill 2025-26. The 2025-26 minutes publish their "
+                "position as a **Spill Over** table instead, which is a "
+                "different shape and fills 2024-25.\n\n"
+                "Earlier years do carry Spill Over tables, but theirs "
+                "is a **third layout again**: it prints Budget Approved "
+                "(Cumulative), Cumulative Progress and Spill Over, with "
+                "**no surrender column at all**, so the identity this "
+                "app checks every execution row against does not hold "
+                "and the columns do not line up. Those rows are "
+                "extracted but deliberately not published, because "
+                "mapping them onto these headings would put real "
+                "figures under the wrong names.")
+            st.caption(
+                "Budget coverage is unaffected. Every year on the other "
+                "tabs is read from its own costing sheet.")
     if not ex_years:
         st.info("No execution data loaded yet.")
     else:
