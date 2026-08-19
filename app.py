@@ -917,31 +917,37 @@ with tab_run:
     ex_years = sorted(EXEC["year_filled"].dropna().unique())
     missing = [y for y in YEARS_IN_WB if y not in ex_years]
     if missing:
-        with section("Why this tab covers fewer years than the others",
-                     "amber"):
+        with section("What this tab covers, and what it cannot", "amber"):
             st.markdown(
                 f"Execution is published for **{', '.join(ex_years)}** "
-                f"and not yet for **{', '.join(missing)}**, and the "
-                "reason is a change in what the ministry prints rather "
-                "than a gap in reading.\n\n"
-                "The **Non Recurring Activities Report** this tab reads "
-                "is a PRABANDH-era table. It appears in the 2026-27 "
-                "minutes and in no document before them, so it can only "
-                "ever fill 2025-26. The 2025-26 minutes publish their "
-                "position as a **Spill Over** table instead, which is a "
-                "different shape and fills 2024-25.\n\n"
-                "Earlier years do carry Spill Over tables, but theirs "
-                "is a **third layout again**: it prints Budget Approved "
-                "(Cumulative), Cumulative Progress and Spill Over, with "
-                "**no surrender column at all**, so the identity this "
-                "app checks every execution row against does not hold "
-                "and the columns do not line up. Those rows are "
-                "extracted but deliberately not published, because "
-                "mapping them onto these headings would put real "
-                "figures under the wrong names.")
+                f"and not for **{', '.join(missing)}**. The reason is a "
+                "change in what the ministry prints, not a gap in "
+                "reading, and the shape of the table changes with it."
+                "\n\n"
+                "The **Non Recurring Activities Report** appears in the "
+                "2026-27 minutes and in no document before them, so it "
+                "can only ever fill 2025-26. The 2025-26 minutes publish "
+                "a **Spill Over** table instead, keyed on approved, "
+                "expenditure, surrender and spillover, and that fills "
+                "2024-25. Older minutes print a **third layout again**, "
+                "keyed on approved, cumulative progress and spillover "
+                "with **no surrender column at all**, which is why the "
+                "surrender figure is empty for 2023-24 rather than "
+                "zero. A page prints it or it does not."
+                "\n\n"
+                "2026-27's own execution will appear in the 2027-28 "
+                "minutes, which do not exist yet. 2019-20 and 2020-21 "
+                "wait on that third-layout parser being pointed at "
+                "their years.")
+            cov = (EXEC.groupby("year_filled")["state"].nunique()
+                   .reindex(ex_years))
             st.caption(
-                "Budget coverage is unaffected. Every year on the other "
-                "tabs is read from its own costing sheet.")
+                "State coverage differs by year, because a spillover "
+                "page that is a scan is refused rather than read off an "
+                "OCR layer: "
+                + "; ".join(f"{y} {int(n)} of 36" for y, n in cov.items())
+                + ". Budget coverage is unaffected, and every year on "
+                "the other tabs is read from its own costing sheet.")
     if not ex_years:
         st.info("No execution data loaded yet.")
     else:
