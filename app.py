@@ -114,6 +114,10 @@ NO_ASK = {
         "too damaged to enumerate the boundary lines",
 }
 
+# every budget year the app may show, used before COST is read
+YEARS_IN_WB_RAW = ["2019-20", "2020-21", "2021-22", "2022-23", "2023-24",
+                   "2024-25", "2025-26", "2026-27"]
+
 COMPONENTS = ["ICT Lab", "Smart Classroom", "Digital Library",
               "Computer Devices", "Teacher Tablets", "Other ICT"]
 COMP_COLOR = {
@@ -195,12 +199,14 @@ def load_links(mtime=None):
 def load_enrolment(mtime=None):
     """State enrolment, for the per-student rates.
 
-    Only 2023-24 and 2024-25 exist. The user's decision (2026-08-19) is
-    to carry 2024-25 forward as a PROXY for 2025-26 and 2026-27 so the
-    recent, complete budget years get a per-student figure at all. The
-    proxying happens here rather than in the workbook, and every row it
-    creates is marked `proxy=True` so the page can say which years are
-    like-for-like and which are not.
+GOVERNMENT + GOVERNMENT AIDED enrolment, not all-management: the
+    money reaches those schools and never Private Unaided ones, so this
+    is the population the scheme can actually spend on.
+
+    Covers 2022-23 to 2025-26. The remaining years carry the latest one
+    forward as a PROXY so a budget year still gets a rate; every row
+    that creates is marked `proxy=True` and the page says which years
+    are like-for-like.
     """
     try:
         e = pd.read_excel(WB, sheet_name="Data_Enrolment")
@@ -208,7 +214,7 @@ def load_enrolment(mtime=None):
         return None
     e["proxy"] = False
     latest = e[e["year"] == e["year"].max()]
-    for y in ("2025-26", "2026-27"):
+    for y in YEARS_IN_WB_RAW:
         if y in set(e["year"]):
             continue
         p = latest.copy()
@@ -272,9 +278,9 @@ LAKH = 100000.0
 def per_student(year, states=None):
     """(rupees per student, is_proxy, denominator year) for a budget year.
 
-    Returns (nan, ...) when no enrolment is available. The denominator is
-    ALL-MANAGEMENT enrolment, which is wider than the population ICT
-    money reaches, so the rate understates what a funded school gets.
+    Returns (nan, ...) when no enrolment is available. The denominator
+    is Government + Government Aided enrolment, which is the population
+    Samagra Shiksha ICT money actually reaches.
     """
     if ENROL is None:
         return float("nan"), False, None
@@ -606,16 +612,14 @@ with tab_story:
                         height=220, ytitle="Rs per student, approved"),
                     use_container_width=True)
             st.caption(
-                "Approved outlay divided by UDISE Plus enrolment. Three "
-                "things this rate is not. The enrolment counts **all "
-                "managements** while the money reaches Government and "
-                "Government aided schools only, so the true rate per "
-                "funded child is higher. Enrolment exists only for "
-                "2023-24 and 2024-25, so later years use **2024-25 as a "
-                "stated proxy** and their denominator is one to two "
-                "years stale. And a year of approvals is small against a "
-                "stock of equipment built over many, so this is what was "
-                "committed that year, not what a child has access to.")
+                "Approved outlay divided by UDISE Plus enrolment in "
+                "**Government and Government aided schools**, which is "
+                "the population this money reaches. Two things to hold "
+                "on to. Enrolment runs to 2025-26, so 2026-27 carries "
+                "the latest year forward and the table says so. And a "
+                "year of approvals is small against a stock of equipment "
+                "built over many, so this is what was committed that "
+                "year, not what a child has access to.")
 
     with section("And whether the money was used", "amber"):
         ex = EXEC[EXEC["year_filled"].isin(EXEC["year_filled"].unique())]
@@ -996,15 +1000,15 @@ with tab_ground:
         "document. This tab sets the two against each other, as a "
         "ranking, as a trend and as a rate per student and per school."
         "\n\n"
-        "**Read the rates with three things in mind.** The census counts "
+        "**Read the rates with two things in mind.** The census counts "
         "schools in a reference year while the board approves rupees in "
         "a financial year, so the two are never quite the same window. "
-        "Enrolment counts **all managements** while the money reaches "
-        "Government and Government aided schools only, so a per-student "
-        "rate understates what a funded child gets. And one year of "
-        "approvals is small against a stock of equipment built over "
-        "many, so a low rate beside good coverage usually means the "
-        "building happened earlier, not that it never happened.")
+        "And one year of approvals is small against a stock of "
+        "equipment built over many, so a low rate beside good coverage "
+        "usually means the building happened earlier, not that it never "
+        "happened. The per-student rate uses **Government and "
+        "Government aided enrolment**, the population this money "
+        "reaches.")
     if UD is None or UD.empty:
         with section("Not published yet", "plain"):
             st.info(
@@ -1196,9 +1200,10 @@ with tab_ground:
                     use_container_width=True, hide_index=True)
                 table_csv(ps, "ict_per_student")
                 st.caption(
-                    "Enrolment exists for 2023-24 and 2024-25 only, so "
-                    "later years carry 2024-25 forward and the Basis "
-                    "column says which is which. The per-school figure "
+                    "Enrolment is Government plus Government aided, and "
+                    "runs to 2025-26; later years carry the latest "
+                    "forward and the Basis column says which is which. "
+                    "The per-school figure "
                     "uses the census count of government schools, which "
                     "runs to 2025-26. Years still in progress cover only "
                     "the states read, and their rate is over those "
