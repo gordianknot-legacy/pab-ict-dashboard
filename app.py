@@ -165,6 +165,10 @@ def load(mtime=None):
         df["state"] = df["state"].astype(str).str.strip()
     cost["nature_label"] = cost["nature"].map(NATURES).fillna("Not stated")
     cost["level"] = cost["level"].fillna("Not stated")
+    for col in ("code", "enrolment_band"):
+        if col not in cost.columns:
+            cost[col] = ""
+        cost[col] = cost[col].fillna("")
     # Rs lakh throughout the source; Cr is the unit anyone reads in
     for col, out in (("p_amt", "proposed_cr"), ("a_amt", "approved_cr")):
         cost[out] = cost[col] / 100.0
@@ -185,6 +189,35 @@ def load_links(mtime=None):
     d = d[d["Local file"].notna()]
     return d[["Local file", "Portal URL", "Drive link"]].drop_duplicates(
         subset=["Local file"])
+
+
+@st.cache_data
+def load_enrolment(mtime=None):
+    """State enrolment, for the per-student rates.
+
+    Only 2023-24 and 2024-25 exist. The user's decision (2026-08-19) is
+    to carry 2024-25 forward as a PROXY for 2025-26 and 2026-27 so the
+    recent, complete budget years get a per-student figure at all. The
+    proxying happens here rather than in the workbook, and every row it
+    creates is marked `proxy=True` so the page can say which years are
+    like-for-like and which are not.
+    """
+    try:
+        e = pd.read_excel(WB, sheet_name="Data_Enrolment")
+    except ValueError:
+        return None
+    e["proxy"] = False
+    latest = e[e["year"] == e["year"].max()]
+    for y in ("2025-26", "2026-27"):
+        if y in set(e["year"]):
+            continue
+        p = latest.copy()
+        p["proxy_year"] = p["year"]
+        p["year"] = y
+        p["proxy"] = True
+        e = pd.concat([e, p], ignore_index=True)
+    e["proxy_year"] = e.get("proxy_year", pd.Series(dtype=object))
+    return e
 
 
 @st.cache_data
@@ -221,6 +254,46 @@ YEARS_IN_WB = sorted(COST["year"].dropna().unique())
 YEARS_PARTIAL = [y for y in YEARS_IN_WB if y not in YEARS_COMPLETE]
 ALL_STATES = sorted(set(COST["state"]) | set(EXEC["state"]))
 UD_HAVE = set() if UD is None else set(UD["metric"])
+ENROL = load_enrolment(_mt(WB))
+
+# The three census measures chosen to sit against spend (user decision,
+# 2026-08-19). Each is the closest inventory match for something the
+# money actually buys.
+JUXTAPOSE = [
+    ("schools_with_functional_computer", "Schools with a working computer"),
+    ("govt_schools_with_functional_ict_lab",
+     "Government schools with a working ICT lab"),
+    ("schools_with_internet", "Schools with internet"),
+]
+# Rs lakh -> rupees, for per-student and per-school rates
+LAKH = 100000.0
+
+
+def per_student(year, states=None):
+    """(rupees per student, is_proxy, denominator year) for a budget year.
+
+    Returns (nan, ...) when no enrolment is available. The denominator is
+    ALL-MANAGEMENT enrolment, which is wider than the population ICT
+    money reaches, so the rate understates what a funded school gets.
+    """
+    if ENROL is None:
+        return float("nan"), False, None
+    e = ENROL[ENROL["year"] == year]
+    d = state_totals([year])
+    if states:
+        e = e[e["state"].isin(states)]
+        d = d[d["state"].isin(states)]
+    # only count enrolment for states that actually have a budget row,
+    # so a state we have not read cannot deflate the rate
+    e = e[e["state"].isin(set(d["state"]))]
+    denom = e["total_enrolment"].sum()
+    if not denom or d.empty:
+        return float("nan"), False, None
+    rate = d["a_amt"].sum() * LAKH / denom
+    proxy = bool(e["proxy"].any())
+    src = (e["proxy_year"].dropna().iloc[0] if proxy
+           and e["proxy_year"].notna().any() else year)
+    return rate, proxy, src
 
 
 def source_url(local_file):
@@ -297,6 +370,76 @@ def bar(df, x, y, color=None, tooltip=None, height=300, sort=None,
                               titleFont=SANS, titleColor=QUIET,
                               labelFontSize=11, titleFontSize=10,
                               symbolType="square"))
+
+
+
+
+BANDS = ["Under 100", "100 to 250", "250 to 700", "Over 700"]
+# What "spend" means on a budget tab. Proposed and Approved come off the
+# costing sheet and exist for every row; Spent comes from the execution
+# report, which is a different table for a different year, so it is
+# offered only where that year has one and never mixed into the same
+# total as the other two.
+MEASURES = {
+    "Proposed": "p_amt",
+    "Approved": "a_amt",
+}
+
+
+def filter_rows(d, natures=None, bands=None):
+    """Apply the recurring and enrolment-band filters.
+
+    A row with no band prints none on the page (recurring lines and
+    smart-classroom lines usually do not name one), so "Not banded" is
+    an explicit choice rather than a silent drop.
+    """
+    if natures is not None and len(natures) < len(NATURES):
+        d = d[d["nature_label"].isin(natures)]
+    if bands is not None and len(bands) < len(BANDS) + 1:
+        want = set(bands)
+        col = d["enrolment_band"].fillna("").replace("", "Not banded")
+        d = d[col.isin(want)]
+    return d
+
+
+def filter_controls(key, cols):
+    """The recurring / enrolment-band pair, laid into given columns."""
+    nat = cols[0].multiselect(
+        "Recurring or not", list(NATURES.values()),
+        default=list(NATURES.values()), key=f"nat_{key}",
+        help="Non recurring is the one time cost of buying and "
+             "installing; recurring is the yearly cost of keeping it "
+             "working.")
+    band = cols[1].multiselect(
+        "School enrolment band", BANDS + ["Not banded"],
+        default=BANDS + ["Not banded"], key=f"band_{key}",
+        help="ICT hardware is priced by the size of the school it goes "
+             "into, from Rs 2.5 lakh under 100 pupils to Rs 12.8 lakh "
+             "over 700. Lines that name no band print none.")
+    return nat, band
+
+
+def per_school_label(year):
+    """Approved outlay per government school, from the census count.
+
+    A companion to the per-student rate and arguably the truer one: ICT
+    is funded per school and priced by the school's enrolment band, so
+    the school is the unit the scheme actually buys for.
+    """
+    if UD is None:
+        return "no data"
+    g = UD[(UD["metric"] == "govt_schools_total") & (UD["unit"] == "count")
+           & (UD["state"] != "India")]
+    if g.empty:
+        return "no data"
+    yr = year if year in set(g["year"]) else sorted(g["year"])[-1]
+    g = g[g["year"] == yr]
+    d = state_totals([year])
+    g = g[g["state"].isin(set(d["state"]))]
+    denom = g["value"].sum()
+    if not denom or d.empty:
+        return "no data"
+    return f"Rs {d['a_amt'].sum() * LAKH / denom:,.0f}"
 
 
 # -------------------------------------------------------------- header
@@ -425,6 +568,55 @@ with tab_story:
                 height=260, ytitle="Approved, Rs Cr"),
             use_container_width=True)
 
+    with section("What it comes to per child", "pink"):
+        if ENROL is None:
+            st.info("No enrolment data loaded, so no per-student rate.")
+        else:
+            rows = []
+            for y in YEARS_COMPLETE:
+                rate, proxy, src = per_student(y)
+                if pd.isna(rate):
+                    continue
+                rows.append({"Year": y, "Rs per student": round(rate, 2),
+                             "Enrolment year": src,
+                             "Basis": "proxy" if proxy else "same year"})
+            ps = pd.DataFrame(rows)
+            latest_rate, latest_proxy, latest_src = per_student(latest)
+            st.markdown(
+                f"Set against the children in the system, the sums stop "
+                f"sounding large. **{latest}**'s approved ICT outlay works "
+                f"out at **Rs {latest_rate:,.0f} per student enrolled**, "
+                f"which is roughly the price of a bus fare, once a year, "
+                f"for a computer lab and the electricity to run it.")
+            if not ps.empty:
+                c = st.columns(len(ps) + 1)
+                for i, r in ps.reset_index(drop=True).iterrows():
+                    c[i].metric(f"{r['Year']}",
+                                f"Rs {r['Rs per student']:,.0f}")
+                c[len(ps)].metric("Per school",
+                                  per_school_label(latest))
+                st.altair_chart(
+                    bar(ps, "Year:N", "Rs per student:Q",
+                        color=alt.value(CSF_BLUE),
+                        tooltip=[alt.Tooltip("Year:N"),
+                                 alt.Tooltip("Rs per student:Q",
+                                             format=",.2f"),
+                                 alt.Tooltip("Enrolment year:N"),
+                                 alt.Tooltip("Basis:N")],
+                        height=220, ytitle="Rs per student, approved"),
+                    use_container_width=True)
+            st.caption(
+                "Approved outlay divided by UDISE Plus enrolment. Three "
+                "things this rate is not. The enrolment counts **all "
+                "managements** while the money reaches Government and "
+                "Government aided schools only, so the true rate per "
+                "funded child is higher. Enrolment exists only for "
+                "2023-24 and 2024-25, so later years use **2024-25 as a "
+                "stated proxy** and their denominator is one to two "
+                "years stale. And a year of approvals is small against a "
+                "stock of equipment built over many, so this is what was "
+                "committed that year, not what a child has access to.")
+
     with section("And whether the money was used", "amber"):
         ex = EXEC[EXEC["year_filled"].isin(EXEC["year_filled"].unique())]
         ay = sorted(ex["year_filled"].unique())
@@ -470,18 +662,35 @@ with tab_nat:
             default=[k for k in COMPONENTS
                      if k in set(COST["component"])],
             help="Every component the costing sheets carry for this year.")
+        c2 = st.columns([2, 2, 2])
+        n_nat, n_band = filter_controls("nat", c2)
+        n_measure = c2[2].radio(
+            "Measure", list(MEASURES), index=1, horizontal=True,
+            key="meas_nat",
+            help="Proposed is what the state asked for, approved is what "
+                 "the board granted. What was actually spent is a "
+                 "different table entirely and lives in Approved vs "
+                 "Spent.")
         if n_year not in YEARS_COMPLETE:
             st.warning(
                 f"{n_year} is still being extracted. Its figures cover "
                 f"{COST[COST['year'] == n_year]['state'].nunique()} of 36 "
                 "states and must not be read as a national total.")
 
-    d = state_totals([n_year], components=n_comp)
+    d = filter_rows(state_totals([n_year], components=n_comp),
+                    n_nat, n_band)
+    n_col = MEASURES[n_measure]
+    n_cr = "proposed_cr" if n_col == "p_amt" else "approved_cr"
+    if d.empty:
+        st.warning("No rows match those filters.")
+        st.stop()
 
     with section("The year in four figures", "navy"):
         c = st.columns(4)
         c[0].metric("Proposed", f"Rs {cr(d['proposed_cr'].sum())} Cr")
         c[1].metric("Approved", f"Rs {cr(d['approved_cr'].sum())} Cr")
+        # the toggle changes what the charts below plot, not these two,
+        # which always show both sides so the gap stays visible
         share = (d["approved_cr"].sum() / d["proposed_cr"].sum() * 100
                  if d["proposed_cr"].sum() else float("nan"))
         c[2].metric("Approved share",
@@ -492,17 +701,17 @@ with tab_nat:
     with section("Where the money goes, by state", "blue"):
         g = (d.groupby("state", as_index=False)
              [["proposed_cr", "approved_cr"]].sum()
-             .sort_values("approved_cr", ascending=False))
+             .sort_values(n_cr, ascending=False))
         st.altair_chart(
             bar(g, alt.X("state:N", sort=g["state"].tolist()),
-                "approved_cr:Q",
+                f"{n_cr}:Q",
                 color=alt.value(CSF_BLUE),
                 tooltip=[alt.Tooltip("state:N", title="State"),
                          alt.Tooltip("proposed_cr:Q", title="Proposed Cr",
                                      format=",.2f"),
                          alt.Tooltip("approved_cr:Q", title="Approved Cr",
                                      format=",.2f")],
-                height=340, ytitle="Approved, Rs Cr"),
+                height=340, ytitle=f"{n_measure}, Rs Cr"),
             use_container_width=True)
         g["Approved share %"] = (g["approved_cr"] / g["proposed_cr"]
                                  * 100).round(0)
@@ -527,22 +736,22 @@ with tab_nat:
             "as two separate blocks with their own subtotals, which is "
             "why they can be reported apart without any apportioning.")
         st.altair_chart(
-            bar(lv, "level:N", "approved_cr:Q",
+            bar(lv, "level:N", f"{n_cr}:Q",
                 color=alt.Color("nature_label:N", title="",
                                 scale=alt.Scale(
                                     domain=["Non recurring", "Recurring"],
                                     range=[CSF_BLUE, CSF_YELLOW])),
                 tooltip=[alt.Tooltip("level:N", title="Level"),
                          alt.Tooltip("nature_label:N", title=""),
-                         alt.Tooltip("approved_cr:Q", title="Approved Cr",
+                         alt.Tooltip(f"{n_cr}:Q", title=n_measure,
                                      format=",.2f")],
-                height=260, ytitle="Approved, Rs Cr"),
+                height=260, ytitle=f"{n_measure}, Rs Cr"),
             use_container_width=True)
 
     with section("Component by component", "pink"):
         cp = (d.groupby("component", as_index=False)
               [["proposed_cr", "approved_cr"]].sum()
-              .sort_values("approved_cr", ascending=False))
+              .sort_values(n_cr, ascending=False))
         cp["Approved share %"] = (cp["approved_cr"] / cp["proposed_cr"]
                                   * 100).round(0)
         show = cp.rename(columns={"component": "Component",
@@ -568,11 +777,14 @@ with tab_exp:
                  "source page. Two or more compare them.")
         e_years = st.multiselect("Years", YEARS_IN_WB,
                                  default=list(YEARS_IN_WB))
+        ec = st.columns([2, 2])
+        e_nat, e_band = filter_controls("exp", ec)
     if not picked or not e_years:
         st.info("Pick at least one state and one year.")
     elif len(picked) == 1:
         s = picked[0]
-        d = state_totals(e_years, states=[s])
+        d = filter_rows(state_totals(e_years, states=[s]),
+                        e_nat, e_band)
         with section(f"{s}, in total", "navy"):
             if d.empty:
                 reasons = [f"{y}, {NO_ASK[(y, s)]}"
@@ -598,16 +810,19 @@ with tab_exp:
         if not d.empty:
             with section("Every printed line, and the page it is on",
                          "blue"):
-                t = d[["year", "component", "level", "nature_label",
-                       "activity", "p_phy", "p_amt", "a_phy", "a_amt",
+                t = d[["year", "code", "component", "level",
+                       "nature_label", "enrolment_band", "activity",
+                       "p_phy", "p_amt", "a_phy", "a_amt",
                        "source_file", "pdf_page"]].copy()
                 t["Source"] = t.apply(
                     lambda r: f"{r['source_file']} p.{int(r['pdf_page'])}"
                     if pd.notna(r["pdf_page"]) else r["source_file"],
                     axis=1)
                 t = t.rename(columns={
-                    "year": "Year", "component": "Component",
+                    "year": "Year", "code": "Code",
+                    "component": "Component",
                     "level": "Level", "nature_label": "R / NR",
+                    "enrolment_band": "Enrolment band",
                     "activity": "Printed line",
                     "p_phy": "Proposed units", "p_amt": "Proposed Rs lakh",
                     "a_phy": "Approved units", "a_amt": "Approved Rs lakh"})
@@ -632,7 +847,8 @@ with tab_exp:
                     u = source_url(f)
                     st.markdown(f"- [{f}]({u})" if u else f"- {f}")
     else:
-        d = state_totals(e_years, states=picked)
+        d = filter_rows(state_totals(e_years, states=picked),
+                        e_nat, e_band)
         with section("Side by side", "navy"):
             g = (d.groupby(["state", "year"], as_index=False)
                  [["proposed_cr", "approved_cr"]].sum())
@@ -777,12 +993,18 @@ with tab_ground:
         "Money approved is one measure. Whether a school actually has a "
         "working computer is another, and **UDISE Plus**, the ministry's "
         "annual school census, counts it independently of any budget "
-        "document. This tab sets the two beside each other and "
-        "deliberately stops there. It never divides one by the other, "
-        "because the census counts schools in a reference year while the "
-        "board approves rupees in a financial year, and a rate built "
-        "across them would be an invented number wearing a decimal "
-        "point.")
+        "document. This tab sets the two against each other, as a "
+        "ranking, as a trend and as a rate per student and per school."
+        "\n\n"
+        "**Read the rates with three things in mind.** The census counts "
+        "schools in a reference year while the board approves rupees in "
+        "a financial year, so the two are never quite the same window. "
+        "Enrolment counts **all managements** while the money reaches "
+        "Government and Government aided schools only, so a per-student "
+        "rate understates what a funded child gets. And one year of "
+        "approvals is small against a stock of equipment built over "
+        "many, so a low rate beside good coverage usually means the "
+        "building happened earlier, not that it never happened.")
     if UD is None or UD.empty:
         with section("Not published yet", "plain"):
             st.info(
@@ -887,51 +1109,100 @@ with tab_ground:
                     "figure. Read this as three separate stretches, not "
                     "one trend.")
 
-        with section("The money and the count, side by side", "gold"):
+        with section("Spend against what is on the ground", "gold"):
             st.markdown(
-                "Two measurements of the same states, drawn from two "
-                "unrelated documents. A state high on one axis and low "
-                "on the other is worth a question rather than a "
-                "conclusion, because one year of approvals is small "
-                "against a stock of schools built up over many.")
-            c = st.columns(2)
+                "Three census measures, each the closest inventory match "
+                "for something the money buys, set against the outlay "
+                "the board approved. A state high on one axis and low on "
+                "the other is worth a question rather than a conclusion.")
+            c = st.columns([2, 2, 2])
             b_year = c[0].selectbox("Budget year", YEARS_IN_WB,
                                     index=len(YEARS_IN_WB) - 1,
-                                    key="ud_budget_year")
-            m_year = c[1].selectbox("Census year", u_years,
-                                    index=len(u_years) - 1,
-                                    key="ud_census_year")
+                                    key="jx_budget_year")
+            j_metric = c[1].selectbox(
+                "Census measure", [m for m, _ in JUXTAPOSE
+                                   if m in UD_HAVE],
+                format_func=lambda m: dict(JUXTAPOSE)[m],
+                key="jx_metric")
+            j_years = sorted(UD[UD["metric"] == j_metric]["year"].unique())
+            m_year = c[2].selectbox("Census year", j_years,
+                                    index=len(j_years) - 1,
+                                    key="jx_census_year")
+
             money = (state_totals([b_year]).groupby("state", as_index=False)
                      ["approved_cr"].sum())
-            cen = (UD[(UD["metric"] == u_metric) & (UD["unit"] == u_unit)
+            cen = (UD[(UD["metric"] == j_metric) & (UD["unit"] == "percent")
                       & (UD["year"] == m_year) & (UD["state"] != "India")]
                    [["state", "value"]])
             both = money.merge(cen, on="state", how="inner")
             if both.empty:
                 st.info("No states appear in both of those selections.")
             else:
+                base = alt.Chart(both)
+                pts = base.mark_circle(size=130, opacity=0.8).encode(
+                    x=alt.X("value:Q", axis=Y_AXIS, scale=alt.Scale(zero=False),
+                            title=f"{dict(JUXTAPOSE)[j_metric]}, "
+                                  f"% of schools, census {m_year}"),
+                    y=alt.Y("approved_cr:Q", axis=Y_AXIS,
+                            title=f"ICT approved Rs Cr, {b_year}"),
+                    color=alt.value(CSF_BLUE),
+                    tooltip=[alt.Tooltip("state:N", title="State"),
+                             alt.Tooltip("value:Q", title="Census %",
+                                         format=",.1f"),
+                             alt.Tooltip("approved_cr:Q",
+                                         title="Approved Cr",
+                                         format=",.2f")])
+                lab = base.mark_text(align="left", dx=7, dy=-4,
+                                     fontSize=10, color=QUIET).encode(
+                    x=alt.X("value:Q", scale=alt.Scale(zero=False)),
+                    y="approved_cr:Q", text="state:N")
                 st.altair_chart(
-                    alt.Chart(both).mark_circle(size=120, opacity=0.75)
-                    .encode(
-                        x=alt.X("value:Q", axis=Y_AXIS,
-                                title=f"{UD_LABEL.get(u_metric, u_metric)}"
-                                      f", census {m_year} ({unit_t})"),
-                        y=alt.Y("approved_cr:Q", axis=Y_AXIS,
-                                title=f"ICT approved Rs Cr, {b_year}"),
-                        color=alt.value(CSF_BLUE),
-                        tooltip=[alt.Tooltip("state:N", title="State"),
-                                 alt.Tooltip("value:Q", title="Census",
-                                             format=",.1f"),
-                                 alt.Tooltip("approved_cr:Q",
-                                             title="Approved Cr",
-                                             format=",.2f")])
-                    .properties(height=340).configure_view(strokeWidth=0),
+                    (pts + lab).properties(height=420)
+                    .configure_view(strokeWidth=0),
                     use_container_width=True)
                 st.caption(
-                    f"{len(both)} states appear in both. Horizontal is "
-                    "the census, vertical is the board. No line is fitted "
-                    "through these points and no ratio is taken across "
-                    "the two axes.")
+                    f"{len(both)} states appear in both. No line is "
+                    "fitted through these points, because the axes are "
+                    "different measurements from different years and a "
+                    "slope across them would not mean what it looks "
+                    "like.")
+
+        with section("What a year of ICT money comes to per child",
+                     "pink"):
+            if ENROL is None:
+                st.info("No enrolment data loaded.")
+            else:
+                rows = []
+                for y in YEARS_IN_WB:
+                    rate, proxy, src = per_student(y)
+                    if pd.isna(rate):
+                        continue
+                    d_y = state_totals([y])
+                    rows.append({
+                        "Year": y,
+                        "Approved Rs Cr": round(d_y["approved_cr"].sum(), 2),
+                        "Rs per student": round(rate, 2),
+                        "Per govt school": per_school_label(y),
+                        "Enrolment year": src,
+                        "Basis": "carried forward" if proxy else "same year",
+                        "States read": d_y["state"].nunique()})
+                ps = pd.DataFrame(rows)
+                st.dataframe(
+                    right_align(
+                        as_text(ps, ["Approved Rs Cr", "Rs per student"],
+                                ",.2f").style,
+                        ["Approved Rs Cr", "Rs per student",
+                         "Per govt school", "States read"]),
+                    use_container_width=True, hide_index=True)
+                table_csv(ps, "ict_per_student")
+                st.caption(
+                    "Enrolment exists for 2023-24 and 2024-25 only, so "
+                    "later years carry 2024-25 forward and the Basis "
+                    "column says which is which. The per-school figure "
+                    "uses the census count of government schools, which "
+                    "runs to 2025-26. Years still in progress cover only "
+                    "the states read, and their rate is over those "
+                    "states alone.")
 
         with section("What the census prints, and what it does not",
                      "amber"):
