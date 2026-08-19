@@ -45,7 +45,7 @@ LINKS = ROOT / "PAB_document_links.xlsx"
 # reconciled against its own printed total. Only these are allowed to
 # carry a national headline. Anything else in the workbook is shown,
 # but always labelled with how many states it covers.
-YEARS_COMPLETE = ["2024-25", "2025-26", "2026-27"]
+YEARS_COMPLETE = ["2023-24", "2024-25", "2025-26", "2026-27"]
 
 # Blocks that are neither read nor confirmed absent, because the source
 # we hold cannot answer. A third category, and it earns its own
@@ -60,6 +60,14 @@ KNOWN_GAPS = {
         "it; it needs a re-fetch of the document. Mizoram's Elementary "
         "figure is complete, because that block happens to print "
         "entirely on one odd page.",
+    ("2023-24", "Jharkhand", "All"):
+        "No 2023-24 minutes exist for Jharkhand, on the ministry portal "
+        "or the shared drive. The only document either holds is a "
+        "corrigendum, and it is a 57 page list of pre-school education "
+        "schools carrying no Total of line and no ICT mention at all. "
+        "There is nothing to fetch and nothing to read; the state's "
+        "2023-24 ICT ask, if it made one, is not in any document we can "
+        "reach.",
 }
 
 # States that appear in no costing row for a year because their minutes
