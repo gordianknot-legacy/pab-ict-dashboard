@@ -45,12 +45,50 @@ LINKS = ROOT / "PAB_document_links.xlsx"
 # reconciled against its own printed total. Only these are allowed to
 # carry a national headline. Anything else in the workbook is shown,
 # but always labelled with how many states it covers.
-YEARS_COMPLETE = ["2023-24", "2024-25", "2025-26", "2026-27"]
+YEARS_COMPLETE = ["2019-20", "2020-21", "2021-22", "2022-23", "2023-24",
+                  "2024-25", "2025-26", "2026-27"]
 
 # Blocks that are neither read nor confirmed absent, because the source
 # we hold cannot answer. A third category, and it earns its own
 # constant: rolling it into NO_ASK would claim a state asked for
 # nothing when the truth is that we cannot see the page.
+# Seven states have no 2021-22 PAB document at all. The ministry
+# portal's own 2021-2022 taxonomy term lists 30 documents covering 24
+# states and UTs, the archived old site carries the same 24, and no
+# other copy exists on the shared drive -- so this is a document that
+# was never published rather than a page we cannot read.
+_NO_DOC_2122 = (
+    "No 2021-22 PAB minutes exist for this state. The ministry portal "
+    "publishes 2021-22 documents for 24 states and UTs and this is not "
+    "one of them; the archived copy of the old site carries the same "
+    "24. There is nothing to fetch and nothing to read, so the state's "
+    "2021-22 ICT ask, if it made one, is not in any document we can "
+    "reach. Every other year covers all 36.")
+
+# A fourth category, and the only one that shrinks the denominator
+# rather than the coverage. Ladakh has no 2019-20 PAB document because
+# the UT was not created until 31 October 2019, several months after
+# that year's PAB met; its schools are inside Jammu & Kashmir's block.
+# Recording it as a missing document would be false -- there was no
+# jurisdiction to publish one -- and recording it as a state that asked
+# for nothing would be false too. So 2019-20 has 35 jurisdictions, not
+# 36, and covering all 35 IS a national total.
+PRE_EXISTENCE = {
+    ("2019-20", "Ladakh"):
+        "The UT of Ladakh was created on 31 October 2019, after the "
+        "2019-20 PAB met. There is no 2019-20 Ladakh plan because there "
+        "was no Ladakh to submit one; its schools are counted inside "
+        "Jammu & Kashmir's 2019-20 block. Ladakh appears in its own "
+        "right from 2020-21 onward.",
+}
+
+
+def jurisdictions(year):
+    """How many plans that year could have had. 36 in every year but
+    2019-20, when Ladakh did not yet exist."""
+    return 36 - sum(1 for (yy, _s) in PRE_EXISTENCE if yy == year)
+
+
 KNOWN_GAPS = {
     ("2024-25", "Mizoram", "Secondary"):
         "The minutes PDF contains only the ODD printed pages of its "
@@ -60,6 +98,13 @@ KNOWN_GAPS = {
         "it; it needs a re-fetch of the document. Mizoram's Elementary "
         "figure is complete, because that block happens to print "
         "entirely on one odd page.",
+    ("2021-22", "Arunachal Pradesh", "All"): _NO_DOC_2122,
+    ("2021-22", "Assam", "All"): _NO_DOC_2122,
+    ("2021-22", "Chandigarh", "All"): _NO_DOC_2122,
+    ("2021-22", "Manipur", "All"): _NO_DOC_2122,
+    ("2021-22", "Puducherry", "All"): _NO_DOC_2122,
+    ("2021-22", "Sikkim", "All"): _NO_DOC_2122,
+    ("2021-22", "Tripura", "All"): _NO_DOC_2122,
     ("2023-24", "Jharkhand", "All"):
         "No 2023-24 minutes exist for Jharkhand, on the ministry portal "
         "or the shared drive. The only document either holds is a "
@@ -68,6 +113,20 @@ KNOWN_GAPS = {
         "There is nothing to fetch and nothing to read; the state's "
         "2023-24 ICT ask, if it made one, is not in any document we can "
         "reach.",
+    ("2020-21", "Andhra Pradesh", "All"):
+        "No 2020-21 minutes exist for Andhra Pradesh under its own "
+        "name. The file the corpus holds at that filename is byte-for-"
+        "byte identical to Andaman & Nicobar Islands' 2020-21 minutes "
+        "(md5 104a54f87d100c7ba78689b3c3ac5609), and the document's own "
+        "subject line reads \"for the UT of Andaman & Nicobar "
+        "Islands\" -- so the file is read as A&N's alone and there is "
+        "no genuine Andhra Pradesh document to fetch or read for this "
+        "year.",
+    ("2020-21", "Puducherry", "All"):
+        "No 2020-21 PAB document exists for Puducherry on the ministry "
+        "portal or the shared drive, under any filename. Every other "
+        "year in this corpus has one; this is the only year Puducherry "
+        "did not publish at all.",
 }
 
 # States that appear in no costing row for a year because their minutes
@@ -107,6 +166,118 @@ NO_ASK = {
         "on any of its 25 Budget Demand pages. Its p84 ICT is labs at the "
         "SCERT and 9 DIETs, and the full ICT table at p18-20 is a "
         "prior-year spillover annexure, not a costing sheet",
+    # 2019-20's eight no-asks. Five say so in their narrative ICT
+    # paragraph; Lakshadweep and Madhya Pradesh print no ICT
+    # sub-component in their costing sheet at all, and carry ICT only as
+    # spill over from 2018-19.
+    ("2019-20", "Chhattisgarh"):
+        "Its narrative ICT paragraph (p30) states no outlay at all -- "
+        "only that \"the state has to make all ICT labs (approved till "
+        "2018-19) functional as committed during PAB\"",
+    ("2019-20", "Goa"):
+        "Its narrative ICT paragraph (p32) is a SURRENDER and nothing "
+        "else: 20 schools approved in 2016-17 given up at Rs 6.4 lakh "
+        "each because their UDISE codes were duplicated, reduced from "
+        "spill-over",
+    ("2019-20", "Haryana"):
+        "Its narrative ICT paragraph (p33) states no outlay -- only that "
+        "the state has to make the 568 ICT labs approved till 2018-19 "
+        "(434 elementary and 134 secondary) functional",
+    ("2019-20", "Kerala"):
+        "Its narrative ICT paragraph (p33) approves a SURRENDER and no "
+        "new ask: 18 schools approved in 2017-18 and 86 in 2016-17 at Rs "
+        "5.4 lakh each, Rs 565.5 lakh given up",
+    ("2019-20", "Lakshadweep"):
+        "Its costing sheet prints no ICT sub-component. The only ICT "
+        "figures in the document are Annexure-V spill over from "
+        "2018-19 -- 54 elementary units at Rs 175.20 lakh and 10 "
+        "secondary at Rs 67.00 lakh, all \"not started\" -- and the "
+        "narrative's one ICT sentence is a review of last year: "
+        "\"Approved fund was not provided and hence action is pending "
+        "for want of financial support\"",
+    ("2019-20", "Madhya Pradesh"):
+        "Its costing sheet (Annexure-VIII) runs Rastriya Aavishkar "
+        "Abhiyan straight into Support at Pre-Primary Level with no ICT "
+        "sub-component between them (p387-388). The only ICT figure in "
+        "the document is Annexure-VI spill over: 2151 secondary "
+        "schools, Rs 13,766.40 lakh, shown as \"Not Started\"",
+    ("2019-20", "Mizoram"):
+        "Its narrative ICT paragraph (p32) refuses the whole ask in as "
+        "many words: \"23 schools approved in 2018-19 are not yet "
+        "functional as per PMS progress report, hence new proposal is "
+        "not considered\"",
+    ("2019-20", "West Bengal"):
+        "Its narrative ICT paragraph (p32) reads \"No proposal for "
+        "2019-20\" in as many words",
+    ("2020-21", "Haryana"):
+        "Its narrative ICT paragraph (p34) states no outlay -- only "
+        "that the state has to make the 568 ICT labs (434 elementary + "
+        "134 secondary) approved till 2018-19 functional, as committed",
+    ("2020-21", "Kerala"):
+        "Its costing sheet (Costing Sheet: Kerala 2020-2021, Annexure "
+        "VII, p108-144) runs Quality Interventions straight through "
+        "Library, Rashtriya Aavishkar Abhiyan, Sports, Composite School "
+        "Grant and Pre-Primary to \"Total for Quality Interventions\" "
+        "with no ICT/Digital Hardware & Software sub-component printed "
+        "anywhere in it. Its own 2019-20 spill-over table (p103-104) "
+        "shows the same component at Rs 0.00, consistent with Kerala's "
+        "2019-20 ICT ask also being a surrender",
+    ("2020-21", "Madhya Pradesh"):
+        "Its costing sheet (Annexure-VI, Cost-Sheet 2020-2021, "
+        "p641-684) runs Quality Interventions from Access & Retention "
+        "straight to \"Total for Quality Interventions\" with no ICT/ "
+        "Digital Hardware & Software sub-component at any point. The "
+        "only ICT figure anywhere in the document is a prior-year "
+        "spill-over line (p636, Rs 13766.40 lakh, \"Not Started\"), "
+        "consistent with Madhya Pradesh's 2019-20 ICT ask also being a "
+        "no-ask",
+    ("2020-21", "Nagaland"):
+        "Its costing sheet (Costing Sheet - Nagaland 2020-2021, "
+        "Annexure XII, p73-117) runs Quality Interventions from "
+        "Libraries straight to Rashtriya Aavishkar Abhiyan to Academic "
+        "Support with no ICT/Digital Hardware & Software sub-component "
+        "printed anywhere in it, and no addendum exists for this year "
+        "in the corpus (unlike 2019-20, which needed one to carry its "
+        "ICT ask at all). The only ICT figures in the document are a "
+        "prior-year spill-over table (p70): Rs 49.97 lakh Elementary "
+        "and Rs 4642.00 lakh Secondary, both carried forward rather "
+        "than freshly asked",
+    ("2020-21", "Maharashtra"):
+        "Its full narrative body (a 250-page pure scan) was read letter "
+        "by letter through every numbered item -- 6/7) RTE and Quality "
+        "Interventions run an unbroken a) through m) with no ICT letter "
+        "among them, 8) Quality Intervention-Other State Specific "
+        "Activities is Foundational Literacy and Shaala Siddhi only, "
+        "and 9) through 17) (Gender & Equity, Inclusive Education, "
+        "Salary of Teachers, Vocational Education, Teacher Education, "
+        "MIS, Programme Management, Spill Over, Costing Sheet) name no "
+        "ICT component either. A document-wide search for \"digital\", "
+        "\"ICT\", \"smart class\", \"virtual class\", \"tablet\" and "
+        "\"laptop\" turns up nothing but a 2019-20 progress-review table "
+        "(p9) and a prior-year spill-over line (p180)",
+    ("2020-21", "Uttar Pradesh"):
+        "Its 1375-page minutes narrative letters its Quality "
+        "Interventions items i) Assessment at State level then skips "
+        "straight to k) School Safety Programme -- the letter j, which "
+        "in this template's usual position is ICT and Digital "
+        "Initiatives, does not exist. A document-wide search for "
+        "\"Digital Hardware\", \"ICT and Digital\", \"smart class\", "
+        "\"virtual class\", \"tablet\" and \"laptop\" turns up nothing "
+        "state-specific anywhere in the document -- p17's \"3. ICT and "
+        "Digital Initiatives\" is the scheme's generic norm description, "
+        "not a state ask",
+    ("2022-23", "Gujarat"):
+        "All 105 Total of lines across its costing sheet (Costing Sheet "
+        "Samagra Shiksha Gujarat for the Year 2022-2023, p206-242) were "
+        "enumerated and none is ICT. Its p203 ICT table is the "
+        "prior-year Spill Over report and its p77 ICT rows are an "
+        "activity calendar carrying physical targets and no money",
+    ("2022-23", "West Bengal"):
+        "All 75 Total of lines across its fully digital costing sheet "
+        "were enumerated and none is ICT. The state SURRENDERED its ICT "
+        "instead, listing 125 elementary and 2343 secondary schools at "
+        "p288-373; its p459 ICT table is the prior-year spillover "
+        "report",
     ("2023-24", "Karnataka"):
         "All 93 Total of lines across its costing sheet were enumerated "
         "and none is ICT. Its only ICT is a BRC facility and DIET/SCERT "
@@ -267,6 +438,13 @@ UD = load_udise(_mt(WB))
 YEARS_IN_WB = sorted(COST["year"].dropna().unique())
 YEARS_PARTIAL = [y for y in YEARS_IN_WB if y not in YEARS_COMPLETE]
 ALL_STATES = sorted(set(COST["state"]) | set(EXEC["state"]))
+# Categories the COSTING sheet actually carries, in COMPONENTS order.
+# Four of the six (Computer Devices, Teacher Tablets, Digital Library,
+# Other ICT) appear only in the execution report, so offering them on a
+# costing tab would be four filter options that never match a row.
+# Derived from the data rather than hardcoded, so a later extraction
+# pass that adds a costing row for one of them lights it up by itself.
+COST_COMPONENTS = [k for k in COMPONENTS if k in set(COST["component"])]
 UD_HAVE = set() if UD is None else set(UD["metric"])
 ENROL = load_enrolment(_mt(WB))
 
@@ -327,15 +505,38 @@ def cr(v, dp=0):
 
 def year_note(years):
     """One sentence naming the scope of whatever is being shown, so a
-    part-extracted year can never sit unlabelled next to a closed one."""
+    part-extracted year can never sit unlabelled next to a closed one.
+
+    A year can be CLOSED and still not cover 36 states, and the two
+    reasons are different: a state that asked for nothing IS covered,
+    while a state whose PAB document was never published is a hole in
+    the national figure no amount of reading can fill. 2021-22 has
+    seven of those, so the note names the count rather than letting
+    "complete" imply a national total. A third case is neither: in
+    2019-20 Ladakh did not exist yet, so the denominator is 35 and
+    covering all 35 IS national."""
     parts = []
     for y in years:
+        denom = jurisdictions(y)
         n = COST[COST["year"] == y]["state"].nunique()
         n += sum(1 for (yy, _s) in NO_ASK if yy == y)
-        if y in YEARS_COMPLETE:
-            parts.append(f"{y} complete, {n} of 36 states read")
+        nodoc = sum(1 for (yy, _s, lv) in KNOWN_GAPS
+                    if yy == y and lv == "All")
+        part = sum(1 for (yy, _s, lv) in KNOWN_GAPS
+                   if yy == y and lv != "All")
+        if y in YEARS_COMPLETE and (nodoc or part):
+            miss = ((f"{nodoc} state{'s' if nodoc > 1 else ''} published "
+                     f"no PAB document") if nodoc else "")                 + ("; " if nodoc and part else "")                 + ((f"{part} state-level block"
+                    f"{'s are' if part > 1 else ' is'} missing from the "
+                    f"pages we hold") if part else "")
+            parts.append(f"{y} closed at {n} of {denom} states, but "
+                         f"{miss}, so the total is not a full national "
+                         f"one")
+        elif y in YEARS_COMPLETE:
+            parts.append(f"{y} complete, {n} of {denom} states read")
         else:
-            parts.append(f"{y} IN PROGRESS, {n} of 36 states read so far")
+            parts.append(f"{y} IN PROGRESS, {n} of {denom} states read "
+                         f"so far")
     return ". ".join(parts) + "."
 
 
@@ -475,7 +676,6 @@ tab_story, tab_nat, tab_exp, tab_run, tab_ground, tab_qual = st.tabs(
 # ==================================================== 1. THE STORY ====
 with tab_story:
     latest = YEARS_COMPLETE[-1]
-    prev = YEARS_COMPLETE[0] if len(YEARS_COMPLETE) > 1 else None
     cur = state_totals([latest])
     prop, appr = cur["proposed_cr"].sum(), cur["approved_cr"].sum()
 
@@ -490,7 +690,7 @@ with tab_story:
         c[1].metric("Approved", f"Rs {cr(appr)} Cr")
         c[2].metric("Approved share", f"{appr / prop * 100:.0f}%")
         c[3].metric("States asking",
-                    f"{cur['state'].nunique()} of 36")
+                    f"{cur['state'].nunique()} of {jurisdictions(latest)}")
         st.caption(
             "Rs Cr, from the Rs lakh printed in each annexure. The states "
             "not asking are not missing data. Their minutes print no "
@@ -686,8 +886,9 @@ with tab_nat:
         if n_year not in YEARS_COMPLETE:
             st.warning(
                 f"{n_year} is still being extracted. Its figures cover "
-                f"{COST[COST['year'] == n_year]['state'].nunique()} of 36 "
-                "states and must not be read as a national total.")
+                f"{COST[COST['year'] == n_year]['state'].nunique()} of "
+                f"{jurisdictions(n_year)} states and must not be read as "
+                "a national total.")
 
     d = filter_rows(state_totals([n_year], components=n_comp),
                     n_nat, n_band)
@@ -789,19 +990,37 @@ with tab_exp:
                  "source page. Two or more compare them.")
         e_years = st.multiselect("Years", YEARS_IN_WB,
                                  default=list(YEARS_IN_WB))
+        e_comp = st.multiselect(
+            "Category", COST_COMPONENTS, default=list(COST_COMPONENTS),
+            key="comp_exp",
+            help="The ICT component a printed line buys. The costing "
+                 "sheets carry only these; Computer Devices, Teacher "
+                 "Tablets, Digital Library and Other ICT appear in the "
+                 "execution report instead, and so live on Approved vs "
+                 "Spent.")
         ec = st.columns([2, 2])
         e_nat, e_band = filter_controls("exp", ec)
     if not picked or not e_years:
         st.info("Pick at least one state and one year.")
+    elif not e_comp:
+        st.info("Pick at least one category.")
     elif len(picked) == 1:
         s = picked[0]
-        d = filter_rows(state_totals(e_years, states=[s]),
+        d = filter_rows(state_totals(e_years, states=[s],
+                                     components=e_comp),
                         e_nat, e_band)
         with section(f"{s}, in total", "navy"):
             if d.empty:
                 reasons = [f"{y}, {NO_ASK[(y, s)]}"
                            for y in e_years if (y, s) in NO_ASK]
-                if reasons:
+                if len(e_comp) < len(COST_COMPONENTS):
+                    st.info(
+                        f"No {' or '.join(e_comp)} line is printed for "
+                        f"{s} in the years selected. That is the "
+                        "category filter, not an absence in the "
+                        "document: widen it to see what the state did "
+                        "print.")
+                elif reasons:
                     st.info(f"{s} printed no school ICT ask in the years "
                             f"selected. " + ". ".join(reasons) + ".")
                 else:
@@ -854,45 +1073,106 @@ with tab_exp:
                     "Rs lakh here, as printed on the page, so a figure can "
                     "be checked against the annexure without arithmetic. "
                     "The Source column names the PDF and the page.")
+            with section("Category by category", "pink"):
+                cp = (d.groupby("component", as_index=False)
+                      [["proposed_cr", "approved_cr"]].sum()
+                      .sort_values("approved_cr", ascending=False))
+                cp["Approved share %"] = (
+                    cp["approved_cr"] / cp["proposed_cr"] * 100).round(0)
+                show = cp.rename(columns={"component": "Category",
+                                          "proposed_cr": "Proposed Rs Cr",
+                                          "approved_cr": "Approved Rs Cr"})
+                st.dataframe(
+                    right_align(
+                        as_text(show, ["Proposed Rs Cr", "Approved Rs Cr"],
+                                ",.2f").style,
+                        ["Proposed Rs Cr", "Approved Rs Cr",
+                         "Approved share %"]),
+                    use_container_width=True, hide_index=True)
+                table_csv(cp, f"ict_by_category_"
+                              f"{re.sub(r'[^A-Za-z0-9]+', '_', s)}")
+                st.caption(
+                    "Rs Cr, summed across the years selected. "
+                    + year_note(e_years))
             with section("The source documents", "plain"):
                 for f in sorted(d["source_file"].dropna().unique()):
                     u = source_url(f)
                     st.markdown(f"- [{f}]({u})" if u else f"- {f}")
     else:
-        d = filter_rows(state_totals(e_years, states=picked),
+        d = filter_rows(state_totals(e_years, states=picked,
+                                     components=e_comp),
                         e_nat, e_band)
-        with section("Side by side", "navy"):
-            g = (d.groupby(["state", "year"], as_index=False)
-                 [["proposed_cr", "approved_cr"]].sum())
-            st.altair_chart(
-                bar(g, "year:N", "approved_cr:Q",
-                    color=alt.Color("state:N", title="State",
-                                    scale=alt.Scale(range=SERIES)),
-                    tooltip=[alt.Tooltip("state:N", title="State"),
-                             alt.Tooltip("year:N", title="Year"),
-                             alt.Tooltip("approved_cr:Q",
-                                         title="Approved Cr",
-                                         format=",.2f")],
-                    height=320, ytitle="Approved, Rs Cr"),
-                use_container_width=True)
-        with section("Approved outlay by state and year", "blue"):
-            p = (d.pivot_table(index="state", columns="year",
-                               values="approved_cr", aggfunc="sum")
-                 .reset_index().rename(columns={"state": "State / UT"}))
-            ycols = [c for c in p.columns if c != "State / UT"]
-            st.dataframe(
-                right_align(as_text(p, ycols, ",.2f").style, ycols),
-                use_container_width=True, hide_index=True)
-            table_csv(p, "ict_comparison")
-            st.caption("Rs Cr approved. " + year_note(e_years))
-        with section("And the same for what was asked", "gold"):
-            p2 = (d.pivot_table(index="state", columns="year",
-                                values="proposed_cr", aggfunc="sum")
-                  .reset_index().rename(columns={"state": "State / UT"}))
-            ycols = [c for c in p2.columns if c != "State / UT"]
-            st.dataframe(
-                right_align(as_text(p2, ycols, ",.2f").style, ycols),
-                use_container_width=True, hide_index=True)
+        if d.empty:
+            st.info("No printed line matches those filters for the "
+                    "states, years and categories selected.")
+        else:
+            with section("Side by side", "navy"):
+                g = (d.groupby(["state", "year"], as_index=False)
+                     [["proposed_cr", "approved_cr"]].sum())
+                st.altair_chart(
+                    bar(g, "year:N", "approved_cr:Q",
+                        color=alt.Color("state:N", title="State",
+                                        scale=alt.Scale(range=SERIES)),
+                        tooltip=[alt.Tooltip("state:N", title="State"),
+                                 alt.Tooltip("year:N", title="Year"),
+                                 alt.Tooltip("approved_cr:Q",
+                                             title="Approved Cr",
+                                             format=",.2f")],
+                        height=320, ytitle="Approved, Rs Cr"),
+                    use_container_width=True)
+            with section("Approved outlay by state and year", "blue"):
+                p = (d.pivot_table(index="state", columns="year",
+                                   values="approved_cr", aggfunc="sum")
+                     .reset_index().rename(columns={"state": "State / UT"}))
+                ycols = [c for c in p.columns if c != "State / UT"]
+                st.dataframe(
+                    right_align(as_text(p, ycols, ",.2f").style, ycols),
+                    use_container_width=True, hide_index=True)
+                table_csv(p, "ict_comparison")
+                st.caption("Rs Cr approved. " + year_note(e_years))
+            with section("And the same for what was asked", "gold"):
+                p2 = (d.pivot_table(index="state", columns="year",
+                                    values="proposed_cr", aggfunc="sum")
+                      .reset_index().rename(columns={"state": "State / UT"}))
+                ycols = [c for c in p2.columns if c != "State / UT"]
+                st.dataframe(
+                    right_align(as_text(p2, ycols, ",.2f").style, ycols),
+                    use_container_width=True, hide_index=True)
+            with section("What the money goes on, state by state", "pink"):
+                # the chart above splits by state and holds category
+                # constant; this one holds the state and splits the bar by
+                # category, which is the only place the two costing
+                # components can be seen against each other per state
+                gc = (d.groupby(["state", "component"], as_index=False)
+                      ["approved_cr"].sum())
+                st.altair_chart(
+                    bar(gc, "state:N", "approved_cr:Q",
+                        color=alt.Color(
+                            "component:N", title="Category",
+                            scale=alt.Scale(
+                                domain=COST_COMPONENTS,
+                                range=[COMP_COLOR[k]
+                                       for k in COST_COMPONENTS])),
+                        tooltip=[alt.Tooltip("state:N", title="State"),
+                                 alt.Tooltip("component:N", title="Category"),
+                                 alt.Tooltip("approved_cr:Q",
+                                             title="Approved Cr",
+                                             format=",.2f")],
+                        height=320, ytitle="Approved, Rs Cr"),
+                    use_container_width=True)
+                pc = (d.pivot_table(index="state", columns="component",
+                                    values="approved_cr", aggfunc="sum")
+                      .reset_index().rename(columns={"state": "State / UT"}))
+                ccols = [c for c in pc.columns if c != "State / UT"]
+                st.dataframe(
+                    right_align(as_text(pc, ccols, ",.2f").style, ccols),
+                    use_container_width=True, hide_index=True)
+                table_csv(pc, "ict_comparison_by_category")
+                st.caption(
+                    "Rs Cr approved, summed across the years selected. "
+                    "A cell reading no data means the state printed no "
+                    "line in that category, which is not the same as a "
+                    "nil ask. " + year_note(e_years))
 
 
 # =========================================== 4. APPROVED VS SPENT ====
@@ -945,7 +1225,8 @@ with tab_run:
                 "State coverage differs by year, because a spillover "
                 "page that is a scan is refused rather than read off an "
                 "OCR layer: "
-                + "; ".join(f"{y} {int(n)} of 36" for y, n in cov.items())
+                + "; ".join(f"{y} {int(n)} of {jurisdictions(y)}"
+                             for y, n in cov.items())
                 + ". Budget coverage is unaffected, and every year on "
                 "the other tabs is read from its own costing sheet.")
     if not ex_years:
@@ -1295,19 +1576,21 @@ with tab_qual:
                 "States with an ICT ask": d["state"].nunique(),
                 "States printing no ask": noask,
                 "States accounted for": d["state"].nunique() + noask,
+                "Jurisdictions that year": jurisdictions(y),
                 "Budget lines": len(d),
                 "Approved Rs Cr": round(d["approved_cr"].sum(), 2)})
         cov = pd.DataFrame(rows)
         st.dataframe(
             right_align(as_text(cov, ["Approved Rs Cr"], ",.2f").style,
                         ["States with an ICT ask", "States printing no ask",
-                         "States accounted for", "Budget lines",
-                         "Approved Rs Cr"]),
+                         "States accounted for", "Jurisdictions that year",
+                         "Budget lines", "Approved Rs Cr"]),
             use_container_width=True, hide_index=True)
         st.caption(
-            "36 states and union territories submit a plan each year. A "
-            "year is called complete only when every one of them is "
-            "either read or confirmed to print no ask.")
+            "36 states and union territories submit a plan each year, "
+            "except 2019-20, when Ladakh did not yet exist and there "
+            "were 35. A year is called complete only when every one of "
+            "them is either read or confirmed to print no ask.")
 
     with section("The states that asked for nothing", "gold"):
         st.markdown(
@@ -1318,6 +1601,15 @@ with tab_qual:
             [{"Year": y, "State / UT": s, "What settles it": why}
              for (y, s), why in sorted(NO_ASK.items())])
         st.dataframe(na, use_container_width=True, hide_index=True)
+
+    with section("The jurisdiction that did not exist yet", "navy"):
+        st.markdown(
+            "This is the only case where the denominator moves rather "
+            "than the coverage. It is not a gap and not a no-ask.")
+        pe = pd.DataFrame(
+            [{"Year": y, "State / UT": s, "Why": why}
+             for (y, s), why in sorted(PRE_EXISTENCE.items())])
+        st.dataframe(pe, use_container_width=True, hide_index=True)
 
     with section("The one thing the sources cannot answer", "pink"):
         st.markdown(
